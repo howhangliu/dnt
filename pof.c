@@ -265,6 +265,8 @@ static void pof_forward(struct PofElem *pe)
 
 static void pof_try_forward(struct Pof *pof, int event)
 {
+    if (pof->queue_len == 0 || pof->q_head == NULL)
+        return;
     struct PofElem *pkt_to_send = pof->q_head;
     //TODO on timeout the packet with the lowest seq should be sent not the oldest one in the queue
     //      (this follows the RFC, but it's wrong)
@@ -304,10 +306,12 @@ static void *pof_thread(void *arg)
     struct timespec now, timeout;
     struct timespec *next_deadline = get_next_deadline(pof);
     clock_gettime(CLOCK_REALTIME, &now);
-    if (next_deadline && timespeccmp(next_deadline, &now, >))
-        timespecsub(next_deadline, &now, &timeout);
-    else
+    if (next_deadline == NULL)
         timeout = pof->pof_take_any_time;
+    else if (timespeccmp(next_deadline, &now, >))
+        timespecsub(next_deadline, &now, &timeout);
+    else // deadline already passed: fire immediately, don't wait take_any_time
+        timeout = (struct timespec){ 0, 0 };
     while (true) {
         int ret = ppoll(&fd, 1, &timeout, NULL);
         if (ret < 0) {
@@ -329,8 +333,11 @@ static void *pof_thread(void *arg)
             }
             //TODO instead of this: if first item's seq == pof->pof_last_sent + 1
             //      even better: no if here, decide it in pof_try_forward()
-            if (event & POF_IN_ORDER_PKT) {
-                pof_try_forward(pof, event);
+            // eventfd is a counter: concurrent writes sum up (e.g. 1+1=2), so
+            // testing bits of the sum misclassifies events. Attempting a
+            // forward is harmless when the head is not next-in-order.
+            if (event > 0) {
+                pof_try_forward(pof, POF_IN_ORDER_PKT);
             }
         } else if (ret == 0) { // POF timeout, packet deadline or take_any
             if (pof->queue_len != 0) {
@@ -343,10 +350,12 @@ static void *pof_thread(void *arg)
 out:
         next_deadline = get_next_deadline(pof);
         clock_gettime(CLOCK_REALTIME, &now);
-        if (next_deadline && timespeccmp(next_deadline, &now, >))
-            timespecsub(next_deadline, &now, &timeout);
-        else
+        if (next_deadline == NULL)
             timeout = pof->pof_take_any_time;
+        else if (timespeccmp(next_deadline, &now, >))
+            timespecsub(next_deadline, &now, &timeout);
+        else // deadline already passed: fire immediately, don't wait take_any_time
+            timeout = (struct timespec){ 0, 0 };
         pthread_mutex_unlock(&pof->lock);
     }
 
