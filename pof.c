@@ -238,10 +238,13 @@ static struct timespec *get_next_deadline(struct Pof *pof)
     pof->next_to_forward = NULL;
     if (pof->queue_len == 0)
         return NULL;
+    // earliest deadline in the buffer (queue is ordered by seq, not arrival,
+    // so we must scan; the elem holding it is the one a timeout releases)
     struct timespec *ret = &pof->q_head->forward_time;
-    struct PofElem *iter = pof->q_head;
+    pof->next_to_forward = pof->q_head;
+    struct PofElem *iter = pof->q_head->next;
     while (iter) {
-        if (timespeccmp(&iter->forward_time, ret, !=)) {
+        if (timespeccmp(&iter->forward_time, ret, <)) {
             ret = &iter->forward_time;
             pof->next_to_forward = iter;
         }
@@ -266,9 +269,10 @@ static void pof_try_forward(struct Pof *pof, int event)
     //TODO on timeout the packet with the lowest seq should be sent not the oldest one in the queue
     //      (this follows the RFC, but it's wrong)
     if ((event & POF_TIMEOUT) && pof->take_any == false) {
-        log_packet("timeout, next to forward %u", pof->next_to_forward->seq);
-        if (pof->next_to_forward)
+        if (pof->next_to_forward) {
+            log_packet("timeout, next to forward %u", pof->next_to_forward->seq);
             pkt_to_send = pof->next_to_forward;
+        }
     }
     log_packet("try forward, to send %u last sent %u", pkt_to_send->seq, pof->pof_last_sent);
     while (pof->queue_len > 0) {
