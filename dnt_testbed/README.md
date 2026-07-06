@@ -218,12 +218,20 @@ conversion is direct:
   value as an integer, so the emulation grid has 1 ms resolution even where
   the analytical D_ρ is fractional; place emulation markers at the integer
   D actually run)
-- `H* = ceil(D/T) = D`, capped at H_max = 16
+- elimination history is **fixed at H_max = 16 across the sweep**: the
+  model's Pareto front assumes ideal dedup, and the POF hold D does all the
+  dropping (late frames are forwarded stale and discarded at the listener —
+  the model's late-discard). Matching H to D adds non-model losses: DNT's
+  Vector recovery *rogue-drops* out-of-window packets, and H ≤ 2 deadlocks
+  into 2 s resets after a single branch-A loss (measured: D=1/H=1 gives
+  completeness 0.0035). The coupling H\* = ceil(D_ρ/T) is validated
+  separately at the star point: `run_point.sh 6 7` (expect comp ≥ ρ) vs the
+  H_max=4 infeasibility demo `run_point.sh 6 4` (expect comp < ρ).
 
 Run the whole sweep with:
 
 ```bash
-sudo ./sweep.sh                                   # defaults: D in {1..6,8,10,12,16}, R=5, N=60000
+sudo ./sweep.sh                                   # defaults: D in {0..6,8,10,12,16}, H=16, R=5, N=60000
 D_LIST="2 4 6 8" R=10 N=60000 sudo -E ./sweep.sh  # custom grid / repetitions
 ```
 

@@ -9,8 +9,10 @@ DNT="${DNT:-$(command -v dnt || echo "$HERE/../dnt")}"
 if [ ! -x "$DNT" ]; then echo "ERROR: dnt binary not found/executable at '$DNT'" >&2; exit 1; fi
 sed -i "s/MaxDelay=[0-9]*/MaxDelay=$D/; s/frerSeqRcvyHistoryLength=[0-9]*/frerSeqRcvyHistoryLength=$H/" nxp2.ini
 pkill -f "dnt.*nxp[12]\.ini" 2>/dev/null; sleep 0.5
-ip netns exec nxp1 "$DNT" nxp1.ini & sleep 0.5
-ip netns exec nxp2 "$DNT" nxp2.ini & sleep 0.5
+# dnt logs go to files: keeps stdout clean AND releases the pipe so callers
+# using command substitution (sweep.sh) see EOF when this script exits
+ip netns exec nxp1 "$DNT" nxp1.ini > dnt_nxp1.log 2>&1 & sleep 0.5
+ip netns exec nxp2 "$DNT" nxp2.ini > dnt_nxp2.log 2>&1 & sleep 0.5
 ip netns exec listener python3 listener.py $N > "result_D${D}.txt" &
 LPID=$!
 # SCHED_FIFO keeps the 1 kHz source jitter low; fall back if chrt unavailable
