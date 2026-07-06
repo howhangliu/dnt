@@ -5,7 +5,7 @@ Run: ip netns exec listener python3 listener.py N > result.txt"""
 import socket, struct, time, sys
 import numpy as np
 
-N = int(sys.argv[1]) if len(sys.argv) > 1 else 400_000
+N = int(sys.argv[1]) if len(sys.argv) > 1 else 60_000
 ETH_P_ALL = 3
 s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
 s.bind(("eth0", 0))
@@ -57,6 +57,6 @@ comp = len(rec) / N
 A = u - g; dt = np.diff(u)
 avg = float(np.sum(A[:-1] * dt + 0.5 * dt**2) / (u[-1] - u[0]))
 peak = float(np.mean(u[1:] - g[:-1]))
-# report in model time units (1 unit = 10 ms)
+# report in model time units (1 unit = 1 ms)
 print(f"delivered={len(rec)}  completeness={comp:.4f}  "
-      f"avgAoI={avg/0.010:.3f}u  peakAoI={peak/0.010:.3f}u  outOfOrder={ooo}")
+      f"avgAoI={avg/0.001:.3f}u  peakAoI={peak/0.001:.3f}u  outOfOrder={ooo}")

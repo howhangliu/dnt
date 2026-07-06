@@ -5,11 +5,11 @@
 #   talker ──head── nxp1 (SGF) ══branch A══ nxp2 (SRF+POF) ──tail── listener
 #                              ══branch B══
 #
-# Unit mapping: 1 model time unit = 10 ms  =>  T = 10 ms (100 pkt/s)
-#   head/tail:  Dh = Dt = 1     -> netem delay 10ms, no loss
-#   branch A :  Dprop=1, W~Exp(2),  pA=0.80 -> delay (10+5)ms  sigma 10ms expo, loss 20%
-#   branch B :  Dprop=3, W~Exp(0.4),pB=0.90 -> delay (30+25)ms sigma 50ms expo, loss 10%
-# (mean of Exp(beta) = 1/beta units = 5 ms and 25 ms; sigma = 2*mean, see gen_expo_dist.py)
+# Unit mapping: 1 model time unit = 1 ms  =>  T = 1 ms (1000 pkt/s)
+#   head/tail:  Dh = Dt = 1 ms  -> netem delay 1ms, no loss
+#   branch A :  Dprop=1ms, W~Exp(2/ms),   pA=0.97 -> delay (1+0.5)ms sigma 1ms expo, loss 3%
+#   branch B :  Dprop=3ms, W~Exp(0.4/ms), pB=0.99 -> delay (3+2.5)ms sigma 5ms expo, loss 1%
+# (mean of Exp(beta) = 1/beta = 0.5 ms and 2.5 ms; sigma = 2*mean, see gen_expo_dist.py)
 #
 # Run as root:  source env_frer_aoi.sh ; setup
 set -e
@@ -39,17 +39,17 @@ setup() {
   done
 
   # ---- impairments (egress qdiscs on the nxp1 side, head on talker side) ----
-  # head: Dh = 10 ms, lossless
+  # head: Dh = 1 ms, lossless
   netem_warn=0
-  ip netns exec talker tc qdisc replace dev eth0 root netem delay 10ms limit 10000 || netem_warn=1
-  # branch A: L_A = 10ms + Exp(mean 5ms), loss 20%
+  ip netns exec talker tc qdisc replace dev eth0 root netem delay 1ms limit 10000 || netem_warn=1
+  # branch A: L_A = 1ms + Exp(mean 0.5ms), loss 3%
   ip netns exec nxp1 tc qdisc replace dev brA root netem \
-      delay 15ms 10ms distribution expo loss random 20% limit 10000 || netem_warn=1
-  # branch B: L_B = 30ms + Exp(mean 25ms), loss 10%
+      delay 1.5ms 1ms distribution expo loss random 3% limit 10000 || netem_warn=1
+  # branch B: L_B = 3ms + Exp(mean 2.5ms), loss 1%
   ip netns exec nxp1 tc qdisc replace dev brB root netem \
-      delay 55ms 50ms distribution expo loss random 10% limit 10000 || netem_warn=1
-  # tail: Dt = 10 ms, lossless
-  ip netns exec nxp2 tc qdisc replace dev uni root netem delay 10ms limit 10000 || netem_warn=1
+      delay 5.5ms 5ms distribution expo loss random 1% limit 10000 || netem_warn=1
+  # tail: Dt = 1 ms, lossless
+  ip netns exec nxp2 tc qdisc replace dev uni root netem delay 1ms limit 10000 || netem_warn=1
 
   [ "$netem_warn" = 1 ] && echo "WARNING: netem unavailable (container?); impairments NOT applied"
   echo "namespaces up. start DNT:"
