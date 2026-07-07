@@ -13,7 +13,11 @@ pkill -f "dnt.*nxp[12]\.ini" 2>/dev/null; sleep 0.5
 # using command substitution (sweep.sh) see EOF when this script exits
 ip netns exec nxp1 "$DNT" nxp1.ini > dnt_nxp1.log 2>&1 & sleep 0.5
 ip netns exec nxp2 "$DNT" nxp2.ini > dnt_nxp2.log 2>&1 & sleep 0.5
-ip netns exec listener python3 listener.py $N > "result_D${D}.txt" &
+# per-run raw capture (timestamped => reps never overwrite each other);
+# figs.py pools raw/D<D>_H16_*.npz into the PAoI CCDF overlay
+RAWDIR=${RAWDIR:-raw}; mkdir -p "$RAWDIR"
+RAWF="$RAWDIR/D${D}_H${H}_$(date +%Y%m%d-%H%M%S).npz"
+ip netns exec listener python3 listener.py $N "$RAWF" > "result_D${D}.txt" &
 LPID=$!
 # SCHED_FIFO keeps the 1 kHz source jitter low; fall back if chrt unavailable
 if ip netns exec talker chrt -f 1 true 2>/dev/null; then TK="chrt -f 80"; else TK=""; fi

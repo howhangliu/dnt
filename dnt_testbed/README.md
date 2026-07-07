@@ -26,8 +26,8 @@ branch A (Dprop = 1 ms, β_A = 2 ms⁻¹, p_A = 0.97), branch B (Dprop = 3 ms,
 | `nxp1.ini` | DNT config for the **SGF node** (sequence generation + replication). |
 | `nxp2.ini` | DNT config for the **recovery node**: SRF (duplicate elimination, history H) followed by POF (ordering, hold time D). `run_point.sh` rewrites `MaxDelay` and `frerSeqRcvyHistoryLength` in this file for each operating point. |
 | `talker.py` | Periodic source: N frames at T = 1 ms (SCHED_FIFO via `chrt` when available, to keep source jitter ≪ T), 802.1Q VLAN 10, experimental ethertype 0x88B5, payload = 64-bit sequence number + 64-bit float generation timestamp (`CLOCK_REALTIME`). |
-| `listener.py` | Sink + measurement: raw-socket capture of delivered frames, extracts (seq, gen_ts, rx_ts), enforces monotone sequence (out-of-order arrivals counted in `outOfOrder` and discarded, consistent with the model's "late discard"), computes completeness, time-average AoI, and mean peak AoI. |
-| `run_point.sh` | Runs **one operating point** `(D, H, N)`: rewrites `nxp2.ini`, (re)starts both DNT instances, launches listener then talker, prints the result line and stores it in `result_D<D>.txt`. |
+| `listener.py` | Sink + measurement: raw-socket capture of delivered frames, extracts (seq, gen_ts, rx_ts), enforces monotone sequence (out-of-order arrivals counted in `outOfOrder` and discarded, consistent with the model's "late discard"), computes completeness, time-average AoI, and mean peak AoI. Optional 2nd argument: dump the raw per-frame `(seq, gen, rx)` arrays to a compressed `.npz` for offline distributional metrics (PAoI CCDF). |
+| `run_point.sh` | Runs **one operating point** `(D, H, N)`: rewrites `nxp2.ini`, (re)starts both DNT instances, launches listener then talker, prints the result line and stores it in `result_D<D>.txt`. Also saves the raw capture to `raw/D<D>_H<H>_<timestamp>.npz` (timestamped ⇒ repetitions never overwrite each other; override dir with `RAWDIR=`). |
 | `verify_setup.sh` | Post-run sanity checker: dumps qdisc configs + drop counters and per-interface packet counters so replication / elimination / loss rates can be checked against theory (see §5). |
 | `sweep.sh` | Runs the full D-sweep: for each D in the grid, H* = min(D, 16), R repetitions of `run_point.sh`, appending tagged result lines to `sweep_results.txt`. |
 | `aggregate_results.py` | Parses `sweep_results.txt` → `emulation_points.csv` with per-(D,H) means and 95% Student-t confidence intervals, ready to overlay on the figure (see §7). |
@@ -274,6 +274,29 @@ run (N < 65536, §3.2); if a point needs it, raise R (R = 67 ≈ 4×10⁶ sample
 3. If the figure's x-axis is ρ rather than D, map each emulated integer D
    through the Letter's D_ρ relation (eq. Drho) to place the marker at its
    effective ρ; alternatively add a top axis in D.
+
+3b. **PAoI CCDF (fig_paoi):** the Letter's CCDF figure compares the
+   simulator's peak-AoI distribution (curves from `paoi_sweep.py` in the
+   repo root → `paoi_ccdf.npz`) against pooled empirical CCDFs from the raw
+   captures. Required emulation runs: repetitions at **D ∈ {0, 6, 16}, H = 16**
+   (the three curve operating points — DROP, ≈D_ρ design point, HOLD):
+
+   ```bash
+   D_LIST="0 6 16" R=5 N=60000 sudo -E ./sweep.sh   # ~16 min, 5×60000 peaks per D
+   ```
+
+   `figs.py` (repo root) automatically pools every `raw/D<D>_H16_*.npz`
+   per D into the overlay markers; more reps ⇒ deeper reachable tail
+   (pooled n samples resolve the CCDF down to ~1/n).
+
+**Result-file lifecycle:** `sweep_results.txt` is append-only (dated header
+per sweep); `result_D<D>.txt` holds only the *last* run at that D and is
+overwritten; `raw/*.npz` files are timestamped and never overwritten.
+Finished campaigns are preserved by copying `sweep_results.txt`,
+`result_D*.txt`, `emulation_points.csv` (and optionally `raw/`) into
+`results_archive/<date>_<label>/` — that directory is exempt from
+`.gitignore`, so commit it to make the campaign durable
+(first snapshot: `results_archive/2026-07-07_pre-paoi/`).
 
 4. Suggested caption note: "Markers: emulation on the DNT reference
    implementation (Linux network namespaces + netem), mean of R runs of

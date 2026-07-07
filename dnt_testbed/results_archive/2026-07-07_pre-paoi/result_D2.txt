@@ -1,0 +1,1 @@
+delivered=58756  completeness=0.9793  avgAoI=4.282u  peakAoI=4.746u  outOfOrder=1156

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Receiver: logs (seq, gen_ts, rx_ts) per delivered frame; computes in-order
 completeness and time-average / mean-peak in-order AoI.
-Run: ip netns exec listener python3 listener.py N > result.txt"""
+Run: ip netns exec listener python3 listener.py N [raw.npz] > result.txt
+Optional 2nd arg: dump the raw per-frame (seq, gen, rx) arrays to a
+compressed .npz so distributional metrics (PAoI CCDF) can be computed
+offline; timestamps stay in CLOCK_REALTIME seconds."""
 import socket, struct, time, sys
 import numpy as np
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 60_000
+RAW = sys.argv[2] if len(sys.argv) > 2 else None
 ETH_P_ALL = 3
 s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
 s.bind(("eth0", 0))
@@ -44,6 +48,12 @@ try:
             break
 finally:
     s.close()
+
+if RAW and rec:
+    a = np.array(rec, dtype=np.float64)
+    np.savez_compressed(RAW, seq=a[:, 0].astype(np.uint32),
+                        gen=a[:, 1], rx=a[:, 2])
+    print(f"raw samples -> {RAW} ({len(rec)} frames)", file=sys.stderr)
 
 if len(rec) < 2:
     print(f"delivered={len(rec)}  completeness={len(rec)/N:.4f}  "
